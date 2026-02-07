@@ -1,0 +1,18 @@
+[package]
+name = "wallet-core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+anyhow = "1.0"
+async-trait = "0.1"
+
+zeroize = { version = "1.7", features = ["derive"] }
+thiserror = "1.0"
+
+
+[dev-dependencies]
+tokio = { version = "1.49.0", features = ["full"] }
