@@ -10,9 +10,15 @@ crate-type = ["cdylib", "staticlib"]
 anyhow = "1.0"
 async-trait = "0.1"
 
+bip39 = "2.0"
+alloy = { version = "0.1", features = ["full"] }
+rand = "0.8"
+hex = "0.4"
+
 zeroize = { version = "1.7", features = ["derive"] }
 thiserror = "1.0"
 
+bip32 = "0.5"
 
 [dev-dependencies]
 tokio = { version = "1.49.0", features = ["full"] }
