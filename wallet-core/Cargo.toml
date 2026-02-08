@@ -19,6 +19,7 @@ zeroize = { version = "1.7", features = ["derive"] }
 thiserror = "1.0"
 
 bip32 = "0.5"
+k256 = { version = "0.13", features = ["ecdsa"] }
 
 [dev-dependencies]
 tokio = { version = "1.49.0", features = ["full"] }

@@ -1,66 +1,48 @@
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+use thiserror::Error;
+
+pub type WalletResult<T> = std::result::Result<T, WalletError>;
+
+#[derive(Debug, Error, PartialEq, Eq)]
 pub enum WalletError {
-    // ===== Generic =====
-    Unknown,
-    InvalidInput,
+    #[error("Mnemonic Error: {0}")]
+    Mnemonic(#[from] MnemonicError),
 
-    // ===== Cryptography =====
-    InvalidSignature,
-    InvalidPublicKey,
-    InvalidPrivateKey,
-    CryptographyFailed,
+    #[error("Cryptography Error: {0}")]
+    Crypto(#[from] CryptoError),
 
-    // ===== Wallet =====
-    InvalidMnemonic,
-    InvalidDerivationPath,
-    AccountNotFound,
-    KeyManagementFailed,
+    #[error("Validation Error: {0}")]
+    Validation(String),
 
-    // ===== Transaction =====
-    InvalidTransactionData,
-    TransactionBuildFailed,
-    InsufficientGas,
-    InsufficientFunds,
+    #[error("IO Error: {0}")]
+    Io(String),
 
-    // ===== Network / RPC =====
-    NetworkFailed,
-    RpcFailed,
-    RequestTimeout,
-
-    // ===== Hardware Wallet =====
-    HardwareWalletFailed,
-    DeviceNotFound,
-    DeviceActionCancelled,
+    #[error("Unknown Error: {0}")]
+    Unknown(String),
 }
 
-impl WalletError {
-    pub fn message(&self) -> &'static str {
-        match self {
-            WalletError::Unknown => "Unknown error",
-            WalletError::InvalidInput => "Invalid input",
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum MnemonicError {
+    #[error("Invalid word count: {0}. Expected 12 or 24 words.")]
+    InvalidWordCount(usize),
 
-            WalletError::InvalidSignature => "Invalid signature",
-            WalletError::InvalidPublicKey => "Invalid public key",
-            WalletError::InvalidPrivateKey => "Invalid private key",
-            WalletError::CryptographyFailed => "Cryptography failed",
+    #[error("Word '{0}' not found in the BIP39 wordlist.")]
+    UnknownWord(String),
 
-            WalletError::InvalidMnemonic => "Invalid mnemonic",
-            WalletError::InvalidDerivationPath => "Invalid derivation path",
-            WalletError::AccountNotFound => "Account not found",
-            WalletError::KeyManagementFailed => "Key management failed",
+    #[error("Checksum validation failed.")]
+    ChecksumFailed,
 
-            WalletError::InvalidTransactionData => "Invalid transaction data",
-            WalletError::TransactionBuildFailed => "Transaction build failed",
-            WalletError::InsufficientGas => "Insufficient gas",
-            WalletError::InsufficientFunds => "Insufficient funds",
+    #[error("BIP39 internal error: {0}")]
+    Bip39Error(String),
+}
 
-            WalletError::NetworkFailed => "Network error",
-            WalletError::RpcFailed => "RPC request failed",
-            WalletError::RequestTimeout => "Request timeout",
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum CryptoError {
+    #[error("Key derivation failed: {0}")]
+    DerivationFailed(String),
 
-            WalletError::HardwareWalletFailed => "Hardware wallet error",
-            WalletError::DeviceNotFound => "Device not found",
-            WalletError::DeviceActionCancelled => "Action cancelled on device",
-        }
-    }
+    #[error("Invalid key format: {0}")]
+    InvalidKeyFormat(String),
+
+    #[error("Signing failed: {0}")]
+    SigningFailed(String),
 }

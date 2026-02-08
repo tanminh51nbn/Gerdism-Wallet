@@ -1,6 +1,7 @@
 // src/chains/mod.rs
-pub mod trait_api;
 pub mod ethereum;
+pub mod solana;
+pub mod bitcoin;
 
 // Định nghĩa cấu hình chung cho các EVM Chain
 #[derive(Debug, Clone)]

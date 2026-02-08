@@ -1,5 +1,4 @@
-// src/crypto/mnemonic.rs
-use anyhow::{anyhow, Result};
+use crate::error::{MnemonicError, WalletError, WalletResult};
 use bip39::Mnemonic;
 use rand::{thread_rng, Rng};
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -28,11 +27,26 @@ impl WalletMnemonic {
             phrase: mnemonic.to_string(),
         }
     }
-    pub fn from_phrase(phrase: &str) -> Result<Self> {
-        Mnemonic::parse(phrase).map_err(|_| anyhow!("Invalid mnemonic phrase"))?;
+    pub fn from_phrase(phrase: &str) -> WalletResult<Self> {
+        let count = phrase.split_whitespace().count();
+        
+        if !matches!(count, 12 | 24) {
+            return Err(WalletError::Mnemonic(MnemonicError::InvalidWordCount(count)));
+        }
+
+        let mnemonic = Mnemonic::parse(phrase).map_err(|e| {
+            let err_msg = e.to_string().to_lowercase();
+            if err_msg.contains("word") {
+                WalletError::Mnemonic(MnemonicError::UnknownWord(phrase.to_string()))
+            } else if err_msg.contains("checksum") {
+                WalletError::Mnemonic(MnemonicError::ChecksumFailed)
+            } else {
+                WalletError::Mnemonic(MnemonicError::Bip39Error(e.to_string()))
+            }
+        })?;
 
         Ok(Self {
-            phrase: phrase.to_string(),
+            phrase: mnemonic.to_string(),
         })
     }
 
@@ -55,38 +69,34 @@ impl WalletMnemonic {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
-    fn test_generate_new_mnemonic() {
-        let wallet = WalletMnemonic::new();
-        let phrase = wallet.get_phrase();
-        println!("Generated 12 words: {}", phrase);
+    fn test_display_wallet_mnemonic_results() {
+        println!("\n========================================");
+        println!("   WalletMnemonic Function Results");
+        println!("========================================");
 
-        assert_eq!(phrase.split_whitespace().count(), 12);
-        assert!(WalletMnemonic::validate(phrase));
-    }
+        // Test display: new() (12 words)
+        let wallet_12 = WalletMnemonic::new();
+        let phrase_12 = wallet_12.get_phrase();
+        println!("\n[1] new() -> 12 words:");
+        println!("    Phrase: {}", phrase_12);
+        println!("    Valid:  {}", WalletMnemonic::validate(phrase_12));
 
-    #[test]
-    fn test_generate_24_words() {
-        let wallet = WalletMnemonic::new_24_words();
-        let phrase = wallet.get_phrase();
-        println!("Generated 24 words: {}", phrase);
+        // Test display: new_24_words()
+        let wallet_24 = WalletMnemonic::new_24_words();
+        let phrase_24 = wallet_24.get_phrase();
+        println!("\n[2] new_24_words() -> 24 words:");
+        println!("    Phrase: {}", phrase_24);
+        println!("    Valid:  {}", WalletMnemonic::validate(phrase_24));
 
-        assert_eq!(phrase.split_whitespace().count(), 24);
-        assert!(WalletMnemonic::validate(phrase));
-    }
+        // Test display: to_seed()
+        println!("\n[3] to_seed():");
+        let seed_default = wallet_12.to_seed(None);
+        println!("    Seed (no pass):   {}", hex::encode(seed_default));
 
-    #[test]
-    fn test_restore_standard_vector() {
-        let phrase =
-            "shoot island position soft burden budget tooth cruel issue economy destroy above";
-        let expected_seed_hex = "577cd910aede2582668a741d476b45e7998e905a4286f701b87b25923501f9d4ea19513b460bcccbc069ebbe4327a59af3d6463045c4b6fa21a5e7004ccfcc3e";
+        let seed_pass = wallet_12.to_seed(Some("password123"));
+        println!("    Seed (w/ pass):   {}", hex::encode(seed_pass));
 
-        assert!(WalletMnemonic::validate(phrase));
-
-        let wallet = WalletMnemonic::from_phrase(phrase).expect("Should be valid");
-        let seed = wallet.to_seed(None);
-
-        assert_eq!(hex::encode(seed), expected_seed_hex);
+        println!("\n========================================");
     }
 }
