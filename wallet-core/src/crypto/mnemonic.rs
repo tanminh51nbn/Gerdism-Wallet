@@ -182,17 +182,7 @@ impl WalletMnemonic {
     /// # Security Note
     /// Passphrase khác với password. Nếu mất passphrase, không thể khôi phục ví
     /// ngay cả khi có mnemonic phrase.
-    pub fn to_seed(&self, passphrase: Option<&str>) -> Zeroizing<Vec<u8>> {
-        let password = passphrase.unwrap_or("");
-        let mnemonic = Mnemonic::parse(&self.phrase).expect("Internal phrase is valid");
-        Zeroizing::new(mnemonic.to_seed(password).to_vec())
-    }
-
-    /// Tạo seed với fixed-size array (hiệu quả hơn Vec)
-    ///
-    /// # Performance
-    /// Trả về `[u8; 64]` trên stack thay vì `Vec<u8>` trên heap
-    pub fn to_seed_bytes(&self, passphrase: Option<&str>) -> Zeroizing<[u8; 64]> {
+    pub fn to_seed(&self, passphrase: Option<&str>) -> Zeroizing<[u8; 64]> {
         let password = passphrase.unwrap_or("");
         let mnemonic = Mnemonic::parse(&self.phrase).expect("Internal phrase is valid");
         Zeroizing::new(mnemonic.to_seed(password))
@@ -203,7 +193,6 @@ impl WalletMnemonic {
     // =========================================================================
 
     /// Kiểm tra xem phrase có hợp lệ không
-    ///
     /// Thực hiện đầy đủ validation: word count, wordlist, checksum
     #[inline]
     pub fn validate(phrase: &str) -> bool {
@@ -325,9 +314,9 @@ mod tests {
     }
 
     #[test]
-    fn test_to_seed_bytes() {
+    fn test_to_seed_returns_64_bytes() {
         let mnemonic = WalletMnemonic::from_phrase(TEST_MNEMONIC_12).unwrap();
-        let seed = mnemonic.to_seed_bytes(None);
+        let seed = mnemonic.to_seed(None);
         assert_eq!(seed.len(), 64);
     }
 
