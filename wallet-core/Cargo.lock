@@ -3607,6 +3607,8 @@ dependencies = [
  "rand 0.8.5",
  "rlp 0.6.1",
  "secrecy",
+ "serde",
+ "serde_json",
  "thiserror 1.0.69",
  "tiny-keccak",
  "tokio",
