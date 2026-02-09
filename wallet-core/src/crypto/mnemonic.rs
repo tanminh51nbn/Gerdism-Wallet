@@ -214,20 +214,8 @@ impl WalletMnemonic {
         Mnemonic::parse(phrase).is_ok()
     }
 
-    /// Kiểm tra một từ có trong BIP-39 English wordlist không
-    pub fn is_valid_word(word: &str) -> bool {
-        // BIP-39 English wordlist có 2048 từ
-        // bip39 crate không expose wordlist trực tiếp, nên ta dùng cách gián tiếp
-        let test_phrase = format!(
-            "{} abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
-            word
-        );
-        // Nếu từ đầu tiên không hợp lệ, parse sẽ fail với "invalid word"
-        match Mnemonic::parse(&test_phrase) {
-            Ok(_) => true,
-            Err(e) => !e.to_string().contains("invalid word"),
-        }
-    }
+    // NOTE: is_valid_word removed vì bip39 crate không expose wordlist trực tiếp
+    // Sử dụng validate() với full phrase thay thế
 
     /// Lấy strength (bit) của mnemonic
     pub fn strength_bits(&self) -> usize {
@@ -351,13 +339,7 @@ mod tests {
         assert!(!WalletMnemonic::validate("abandon")); // Too few words
     }
 
-    #[test]
-    fn test_is_valid_word() {
-        assert!(WalletMnemonic::is_valid_word("abandon"));
-        assert!(WalletMnemonic::is_valid_word("zoo"));
-        assert!(!WalletMnemonic::is_valid_word("invalidword"));
-        assert!(!WalletMnemonic::is_valid_word("hello")); // Not in BIP-39 wordlist
-    }
+    // NOTE: test_is_valid_word removed - see is_valid_word note above
 
     #[test]
     fn test_strength_bits() {
