@@ -1,6 +1,6 @@
 // src/chains/mod.rs
-pub mod ethereum;
-pub mod solana;
+pub mod evm;
+pub mod svm;
 pub mod bitcoin;
 
 // Định nghĩa cấu hình chung cho các EVM Chain

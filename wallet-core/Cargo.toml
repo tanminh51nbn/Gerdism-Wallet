@@ -12,7 +12,8 @@ async-trait = "0.1"
 
 bip39 = "2.0"
 alloy = { version = "0.1", features = ["full"] }
-rand = "0.8"
+rand = { version = "0.8", features = ["std"] }
+getrandom = { version = "0.2", features = ["js"] }
 hex = "0.4"
 
 zeroize = { version = "1.7", features = ["derive"] }
@@ -20,6 +21,12 @@ thiserror = "1.0"
 
 bip32 = "0.5"
 k256 = { version = "0.13", features = ["ecdsa"] }
+
+tiny-keccak = { version = "2.0.2", features = ["keccak"] }
+rlp = "0.6.1"
+secrecy = "0.10.3"
+
+
 
 [dev-dependencies]
 tokio = { version = "1.49.0", features = ["full"] }
