@@ -99,7 +99,7 @@ impl DerivationPaths {
     /// Solana path with custom account index
     #[inline]
     pub fn solana(account: u32) -> String {
-        format!("m/44'/501'/{}'/0'", account)
+        Self::ed25519_path(coin_type::SOLANA, account, &[0])
     }
 
     // =========================================================================
@@ -130,7 +130,7 @@ impl DerivationPaths {
 
     #[inline]
     pub fn aptos(account: u32) -> String {
-        format!("m/44'/637'/{}'/0'/0'", account)
+        Self::ed25519_path(coin_type::APTOS, account, &[0, 0])
     }
 
     // =========================================================================
@@ -140,7 +140,7 @@ impl DerivationPaths {
 
     #[inline]
     pub fn sui(account: u32) -> String {
-        format!("m/44'/784'/{}'/0'/0'", account)
+        Self::ed25519_path(coin_type::SUI, account, &[0, 0])
     }
 
     // =========================================================================
@@ -150,7 +150,7 @@ impl DerivationPaths {
 
     #[inline]
     pub fn near(account: u32) -> String {
-        format!("m/44'/397'/{}'", account)
+        Self::ed25519_path(coin_type::NEAR, account, &[])
     }
 
     // =========================================================================
@@ -160,7 +160,7 @@ impl DerivationPaths {
 
     #[inline]
     pub fn ton(account: u32) -> String {
-        format!("m/44'/607'/{}'", account)
+        Self::ed25519_path(coin_type::TON, account, &[])
     }
 
     // =========================================================================
@@ -194,8 +194,48 @@ impl DerivationPaths {
     /// * `coin_type` - SLIP-44 coin type
     /// * `account` - Account index
     #[inline]
-    pub fn slip0010(coin_type: u32, account: u32) -> String {
-        format!("m/44'/{}'/{}'/0'", coin_type, account)
+    /// Tạo Path tùy chỉnh linh hoạt cho mọi loại chain
+    ///
+    /// Hàm này hỗ trợ xây dựng path với độ sâu bất kỳ, giải quyết vấn đề của Aptos (5 levels),
+    /// Near (3 levels), Solana (4 levels) mà không cần hardcode.
+    ///
+    /// # Arguments
+    /// * `coin_type` - SLIP-44 coin type (e.g. 60, 501, 637)
+    /// * `account` - Account index (thường là 0)
+    /// * `sub_paths` - Các index con (change, address_index, ...).
+    ///                 Nếu index >= 0x80000000, nó sẽ được hiển thị dạng hardened (').
+    ///                 Tuy nhiên với SLIP-0010 (Ed25519), bạn NÊN dùng hàm `ed25519_path` bên dưới để đảm bảo an toàn.
+    pub fn build_path(coin_type: u32, account: u32, sub_paths: &[u32]) -> String {
+        let mut path = format!("m/44'/{}'/{}'", coin_type, account);
+        for &idx in sub_paths {
+            if idx >= 0x80000000 {
+                // Đã là hardened number, format dạng 0'
+                path.push_str(&format!("/{}'", idx & 0x7FFFFFFF));
+            } else {
+                path.push_str(&format!("/{}", idx));
+            }
+        }
+        path
+    }
+
+    /// Tạo Path chuẩn SLIP-0010 cho Ed25519 (Luôn Hardened)
+    ///
+    /// An toàn hơn `build_path` vì tự động ép tất cả thành Hardened (bắt buộc cho Ed25519).
+    /// Aptos, Sui, Solana, TON đều dùng cái này.
+    ///
+    /// # Verify
+    /// - Solana: `ed25519_path(501, 0, &[0, 0])` -> m/44'/501'/0'/0'
+    /// - Aptos:  `ed25519_path(637, 0, &[0, 0, 0])` -> m/44'/637'/0'/0'/0'
+    /// - Near:   `ed25519_path(397, 0, &[])` -> m/44'/397'/0'
+    pub fn ed25519_path(coin_type: u32, account: u32, sub_paths: &[u32]) -> String {
+        // Base: m/44'/coin_type'/account'
+        let mut path = format!("m/44'/{}'/{}'", coin_type, account);
+
+        // Append sub_paths, tất cả đều thêm ' (hardened)
+        for &idx in sub_paths {
+            path.push_str(&format!("/{}'", idx));
+        }
+        path
     }
 }
 
@@ -246,6 +286,18 @@ mod tests {
     #[test]
     fn test_custom_builders() {
         assert_eq!(DerivationPaths::bip44(44, 60, 0, 0, 0), "m/44'/60'/0'/0/0");
-        assert_eq!(DerivationPaths::slip0010(501, 0), "m/44'/501'/0'/0'");
+        // Solana (4 levels: m/44'/501'/account'/0')
+        // ed25519_path base: m/44'/coin/account
+        assert_eq!(
+            DerivationPaths::ed25519_path(501, 0, &[0]),
+            "m/44'/501'/0'/0'"
+        );
+        // Aptos (6 levels: m/44'/637'/account'/0'/0')
+        assert_eq!(
+            DerivationPaths::ed25519_path(637, 0, &[0, 0]),
+            "m/44'/637'/0'/0'/0'"
+        );
+        // Near (3 levels: m/44'/397'/account')
+        assert_eq!(DerivationPaths::ed25519_path(397, 0, &[]), "m/44'/397'/0'");
     }
 }
