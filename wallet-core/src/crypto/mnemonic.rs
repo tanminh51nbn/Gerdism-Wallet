@@ -65,28 +65,15 @@ impl std::fmt::Debug for WalletMnemonic {
 }
 
 impl WalletMnemonic {
-    // =========================================================================
-    // CONSTRUCTORS
-    // =========================================================================
-
-    /// Tạo mnemonic mới với 12 words (128-bit entropy)
-    ///
-    /// Phù hợp cho hầu hết use cases. Cân bằng giữa bảo mật và tiện dụng.
-    pub fn new() -> Self {
+    pub fn new_12_words() -> Self {
         Self::with_word_count(WordCount::Twelve)
     }
 
-    /// Tạo mnemonic mới với 24 words (256-bit entropy)
-    ///
-    /// Bảo mật cao nhất, khuyến nghị cho ví chứa số lượng lớn.
     pub fn new_24_words() -> Self {
         Self::with_word_count(WordCount::TwentyFour)
     }
 
-    /// Tạo mnemonic với số lượng words tùy chỉnh
-    ///
-    /// # Arguments
-    /// * `word_count` - Số lượng words (12, 15, 18, 21, hoặc 24)
+    /// Tạo mnemonic với số lượng words (word_count) tùy chỉnh
     pub fn with_word_count(word_count: WordCount) -> Self {
         let entropy_size = word_count.entropy_bytes();
 
@@ -94,10 +81,8 @@ impl WalletMnemonic {
         let mut entropy = [0u8; 32];
         OsRng.fill_bytes(&mut entropy[..entropy_size]);
 
-        let mnemonic =
-            Mnemonic::from_entropy(&entropy[..entropy_size]).expect("Valid entropy size");
+        let mnemonic = Mnemonic::from_entropy(&entropy[..entropy_size]).expect("Valid entropy size");
 
-        // Zeroize entropy ngay sau khi sử dụng
         entropy.zeroize();
 
         Self {
@@ -107,7 +92,6 @@ impl WalletMnemonic {
     }
 
     /// Khôi phục mnemonic từ phrase có sẵn
-    ///
     /// # Validation
     /// - Kiểm tra số lượng words (12, 15, 18, 21, 24)
     /// - Kiểm tra từng word có trong BIP-39 wordlist
@@ -148,7 +132,6 @@ impl WalletMnemonic {
     // =========================================================================
 
     /// Lấy mnemonic phrase
-    ///
     /// # Warning
     /// Cẩn thận khi hiển thị hoặc log giá trị này!
     #[inline]
@@ -171,7 +154,7 @@ impl WalletMnemonic {
     // SEED DERIVATION
     // =========================================================================
 
-    /// Tạo seed từ mnemonic (PBKDF2-HMAC-SHA512)
+    /// 12/15/18/21/24 words => PBKDF2-HMAC-SHA512 => OUTPUT: 64 bytes seed (To Create Private Key)
     ///
     /// # Arguments
     /// * `passphrase` - Optional BIP-39 passphrase (thêm layer bảo mật)
@@ -222,7 +205,7 @@ impl WalletMnemonic {
 // Default implementation
 impl Default for WalletMnemonic {
     fn default() -> Self {
-        Self::new()
+        Self::new_12_words()
     }
 }
 
@@ -242,7 +225,7 @@ mod tests {
 
     #[test]
     fn test_new_12_words() {
-        let mnemonic = WalletMnemonic::new();
+        let mnemonic = WalletMnemonic::new_12_words();
         assert_eq!(mnemonic.word_count(), 12);
         assert!(WalletMnemonic::validate(mnemonic.phrase()));
     }
@@ -332,7 +315,7 @@ mod tests {
 
     #[test]
     fn test_strength_bits() {
-        let m12 = WalletMnemonic::new();
+        let m12 = WalletMnemonic::new_12_words();
         let m24 = WalletMnemonic::new_24_words();
 
         assert_eq!(m12.strength_bits(), 128);
@@ -362,8 +345,8 @@ mod tests {
     #[test]
     fn test_unique_generation() {
         // Hai lần gọi new() phải tạo ra mnemonics khác nhau
-        let m1 = WalletMnemonic::new();
-        let m2 = WalletMnemonic::new();
+        let m1 = WalletMnemonic::new_12_words();
+        let m2 = WalletMnemonic::new_24_words();
         assert_ne!(m1.phrase(), m2.phrase());
     }
 }
