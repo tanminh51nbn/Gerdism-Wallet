@@ -1,109 +1,92 @@
-// wallet-core\src\chains\evm\address.rs
+// wallet-core/src/chains/evm/address.rs
 //
-// EVM Address Module - Professional Grade Address Generation
-// Chuẩn: EIP-55 (Checksum), Keccak-256 Hashing
+// EVM Address Module - Professional Grade Address Derivation
+// EIP-55 (Checksum), Keccak-256, secp256k1
 
 use crate::error::{CryptoError, WalletError, WalletResult};
 use alloy::primitives::Address;
 use k256::{elliptic_curve::sec1::ToEncodedPoint, SecretKey};
 use tiny_keccak::{Hasher, Keccak};
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
-/// EVM Address Generator - High-performance & Secure
+/// EVM Address Generator
 ///
-/// # Security Architecture
-/// - **Zeroizing**: Tất cả dữ liệu nhạy cảm (public key bytes) được xóa sau khi sử dụng
-/// - **No Key Storage**: Module này KHÔNG lưu trữ private key
-/// - **Stack Allocation**: Hash output sử dụng stack (32 bytes fixed array)
+/// # Flow:  Private Key (32B) → Public Key (64B) → Keccak256 → Address (20B)
 ///
-/// # Performance
-/// - **Minimal Allocations**: Chỉ allocate khi thực sự cần thiết
-/// - **Inline Hashing**: Keccak-256 trực tiếp, không qua wrapper
+/// # Security
+/// - Zeroize: Mọi intermediate data (hash, public key bytes) đều bị xóa sau khi dùng
+/// - No Storage: Module này KHÔNG lưu private key
+/// - Stack First: Sensitive data ưu tiên stack allocation
 pub struct EvmAddress;
 
 impl EvmAddress {
-    /// Tạo địa chỉ Ethereum từ Private Key
+    // =========================================================================
+    // CORE: Private Key → Address Bytes (20 bytes)
+    // Đây là hàm nền tảng, tất cả hàm khác compose từ đây.
+    // =========================================================================
+
+    /// Derive 20 bytes address từ private key
     ///
-    /// # Algorithm
-    /// 1. Private Key → Public Key (secp256k1)
-    /// 2. Public Key (uncompressed, 65 bytes) → lấy 64 bytes (bỏ prefix 0x04)
-    /// 3. Keccak-256(64 bytes) → 32 bytes hash
-    /// 4. Lấy 20 bytes cuối → Address
-    /// 5. EIP-55 Checksum encoding
-    ///
-    /// # Returns
-    /// - `Ok(String)`: EIP-55 checksummed address (e.g., "0xAb5801a7...")
-    /// - `Err`: Nếu private key không hợp lệ
-    pub fn from_private_key(priv_key: &[u8]) -> WalletResult<String> {
-        // Validate và parse private key
+    /// # Algorithm (chuẩn Ethereum Yellow Paper)
+    /// 1. `priv_key` (32B) → secp256k1 → `pub_key` (uncompressed, 65B)
+    /// 2. Bỏ prefix byte 0x04 → `pub_key_raw` (64B)
+    /// 3. Keccak-256(`pub_key_raw`) → `hash` (32B)
+    /// 4. `hash[12..32]` → `address` (20B)
+    pub fn derive_bytes(priv_key: &[u8]) -> WalletResult<[u8; 20]> {
+        // Parse & validate private key
         let secret_key = SecretKey::from_slice(priv_key).map_err(|e| {
             WalletError::Crypto(CryptoError::InvalidKeyFormat(format!(
-                "Invalid private key (must be 32 bytes): {}",
+                "Invalid secp256k1 private key: {}",
                 e
             )))
         })?;
 
-        // Derive public key và wrap trong Zeroizing để xóa sau khi dùng
+        // Derive public key (uncompressed), wrap trong Zeroizing
         let public_key = secret_key.public_key();
-        let public_key_encoded = Zeroizing::new(public_key.to_encoded_point(false));
+        let encoded = Zeroizing::new(public_key.to_encoded_point(false));
+        let pub_key_raw = &encoded.as_bytes()[1..]; // Bỏ 0x04 prefix
 
-        // Lấy 64 bytes raw (bỏ prefix byte 0x04)
-        let public_key_raw = &public_key_encoded.as_bytes()[1..];
-
-        // Hash bằng Keccak-256 (sử dụng stack allocation)
+        // Keccak-256 hash (stack allocated)
         let mut hasher = Keccak::v256();
-        let mut hash_output = [0u8; 32];
-        hasher.update(public_key_raw);
-        hasher.finalize(&mut hash_output);
+        let mut hash = [0u8; 32];
+        hasher.update(pub_key_raw);
+        hasher.finalize(&mut hash);
 
-        // Lấy 20 bytes cuối làm address
-        let address_bytes = &hash_output[12..];
-
-        // Convert sang Alloy Address và format EIP-55 checksum
-        let addr = Address::from_slice(address_bytes);
-
-        Ok(addr.to_checksum(None))
-    }
-
-    /// Tạo địa chỉ Ethereum và trả về raw bytes (20 bytes)
-    ///
-    /// Dùng khi cần Address dạng bytes thay vì string
-    #[inline]
-    pub fn from_private_key_bytes(priv_key: &[u8]) -> WalletResult<[u8; 20]> {
-        let secret_key = SecretKey::from_slice(priv_key).map_err(|e| {
-            WalletError::Crypto(CryptoError::InvalidKeyFormat(format!(
-                "Invalid private key: {}",
-                e
-            )))
-        })?;
-
-        let public_key = secret_key.public_key();
-        let public_key_encoded = Zeroizing::new(public_key.to_encoded_point(false));
-        let public_key_raw = &public_key_encoded.as_bytes()[1..];
-
-        let mut hasher = Keccak::v256();
-        let mut hash_output = [0u8; 32];
-        hasher.update(public_key_raw);
-        hasher.finalize(&mut hash_output);
-
+        // Extract 20 bytes cuối
         let mut address = [0u8; 20];
-        address.copy_from_slice(&hash_output[12..]);
+        address.copy_from_slice(&hash[12..]);
+
+        // Zeroize hash (chứa thông tin liên quan tới public key)
+        hash.zeroize();
+
         Ok(address)
     }
 
-    /// Validate xem một string có phải là địa chỉ Ethereum hợp lệ không
+    /// Derive EIP-55 checksummed address string
     ///
-    /// Kiểm tra:
-    /// - Format: 0x + 40 hex characters
-    /// - EIP-55 checksum (nếu có mixed case)
+    /// # Returns
+    /// `"0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B"` (mixed-case checksum)
+    #[inline]
+    pub fn derive(priv_key: &[u8]) -> WalletResult<String> {
+        let bytes = Self::derive_bytes(priv_key)?;
+        Ok(Address::from_slice(&bytes).to_checksum(None))
+    }
+
+    // =========================================================================
+    // UTILITIES
+    // =========================================================================
+
+    /// Validate chuỗi có phải Ethereum address hợp lệ không
+    ///
+    /// Kiểm tra: `0x` prefix + 40 hex chars + EIP-55 checksum (nếu mixed case)
     #[inline]
     pub fn is_valid(address: &str) -> bool {
         address.parse::<Address>().is_ok()
     }
 
-    /// Normalize địa chỉ về format EIP-55 checksum
+    /// Normalize về EIP-55 checksum format
     ///
-    /// Input có thể là lowercase, uppercase, hoặc mixed case
+    /// `"0xabcd..."` → `"0xAbCd..."` (mixed-case theo checksum)
     pub fn to_checksum(address: &str) -> WalletResult<String> {
         let addr: Address = address.parse().map_err(|_| {
             WalletError::Crypto(CryptoError::InvalidKeyFormat(
@@ -113,15 +96,20 @@ impl EvmAddress {
         Ok(addr.to_checksum(None))
     }
 
-    /// So sánh hai địa chỉ (case-insensitive)
+    /// So sánh 2 address (case-insensitive, zero-allocation)
+    ///
+    /// Dùng byte comparison qua `alloy::Address` thay vì `.to_lowercase()` heap allocation.
     #[inline]
     pub fn equals(addr1: &str, addr2: &str) -> bool {
-        addr1.to_lowercase() == addr2.to_lowercase()
+        match (addr1.parse::<Address>(), addr2.parse::<Address>()) {
+            (Ok(a), Ok(b)) => a == b,
+            _ => false,
+        }
     }
 }
 
 // =============================================================================
-// UNIT TESTS
+// TESTS
 // =============================================================================
 
 #[cfg(test)]
@@ -139,38 +127,50 @@ mod tests {
     const ANVIL_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 
     #[test]
-    fn test_address_generation() {
+    fn test_derive() {
         let priv_key = hex::decode(TEST_PRIVATE_KEY).unwrap();
-        let address = EvmAddress::from_private_key(&priv_key).unwrap();
+        let address = EvmAddress::derive(&priv_key).unwrap();
         assert_eq!(address, TEST_ADDRESS);
     }
 
     #[test]
-    fn test_address_generation_anvil() {
+    fn test_derive_anvil() {
         let priv_key = hex::decode(ANVIL_PRIVATE_KEY).unwrap();
-        let address = EvmAddress::from_private_key(&priv_key).unwrap();
+        let address = EvmAddress::derive(&priv_key).unwrap();
         assert_eq!(address, ANVIL_ADDRESS);
     }
 
     #[test]
-    fn test_address_bytes() {
+    fn test_derive_bytes() {
         let priv_key = hex::decode(TEST_PRIVATE_KEY).unwrap();
-        let address_bytes = EvmAddress::from_private_key_bytes(&priv_key).unwrap();
+        let address_bytes = EvmAddress::derive_bytes(&priv_key).unwrap();
         let address_hex = format!("0x{}", hex::encode(address_bytes));
-
-        // So sánh case-insensitive
         assert!(EvmAddress::equals(&address_hex, TEST_ADDRESS));
+    }
+
+    #[test]
+    fn test_derive_consistency() {
+        // derive() và derive_bytes() phải cho kết quả giống nhau
+        let priv_key = hex::decode(TEST_PRIVATE_KEY).unwrap();
+        let string_addr = EvmAddress::derive(&priv_key).unwrap();
+        let bytes_addr = EvmAddress::derive_bytes(&priv_key).unwrap();
+        let reconstructed = Address::from_slice(&bytes_addr).to_checksum(None);
+        assert_eq!(string_addr, reconstructed);
     }
 
     #[test]
     fn test_is_valid() {
         assert!(EvmAddress::is_valid(TEST_ADDRESS));
         assert!(EvmAddress::is_valid(ANVIL_ADDRESS));
+        assert!(EvmAddress::is_valid(
+            "0xdead000000000000000000000000000000000000"
+        ));
 
         // Invalid cases
         assert!(!EvmAddress::is_valid("0xinvalid"));
         assert!(!EvmAddress::is_valid("not an address"));
         assert!(!EvmAddress::is_valid("0x123")); // Too short
+        assert!(!EvmAddress::is_valid("")); // Empty
     }
 
     #[test]
@@ -182,22 +182,22 @@ mod tests {
 
     #[test]
     fn test_equals() {
-        let addr1 = "0xABCD1234abcd1234ABCD1234abcd1234ABCD1234";
-        let addr2 = "0xabcd1234abcd1234abcd1234abcd1234abcd1234";
-        assert!(EvmAddress::equals(addr1, addr2));
+        let upper = "0xABCD1234ABCD1234ABCD1234ABCD1234ABCD1234";
+        let lower = "0xabcd1234abcd1234abcd1234abcd1234abcd1234";
+        assert!(EvmAddress::equals(upper, lower));
+        assert!(!EvmAddress::equals(upper, TEST_ADDRESS));
     }
 
     #[test]
     fn test_invalid_private_key() {
-        let invalid_key = [0u8; 31]; // 31 bytes instead of 32
-        let result = EvmAddress::from_private_key(&invalid_key);
-        assert!(result.is_err());
+        assert!(EvmAddress::derive(&[0u8; 31]).is_err()); // Wrong length
+        assert!(EvmAddress::derive(&[0u8; 33]).is_err()); // Wrong length
+        assert!(EvmAddress::derive(&[]).is_err()); // Empty
     }
 
     #[test]
     fn test_zero_private_key_rejected() {
         let zero_key = [0u8; 32];
-        let result = EvmAddress::from_private_key(&zero_key);
-        assert!(result.is_err()); // Zero is not a valid secp256k1 private key
+        assert!(EvmAddress::derive(&zero_key).is_err()); // 0 is not valid secp256k1 key
     }
 }
