@@ -45,4 +45,16 @@ pub enum CryptoError {
 
     #[error("Signing failed: {0}")]
     SigningFailed(String),
+
+    #[error("Signature verification failed: {0}")]
+    VerificationFailed(String),
+
+    #[error("Invalid signature format: {0}")]
+    InvalidSignature(String),
+
+    #[error("Invalid hash length: expected {expected}, got {actual}")]
+    InvalidHashLength { expected: usize, actual: usize },
+
+    #[error("Transaction build error: {0}")]
+    TransactionBuildFailed(String),
 }

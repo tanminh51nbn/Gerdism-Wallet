@@ -3,6 +3,10 @@ name = "wallet-core"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = ["parallel"]
+parallel = ["rayon"]
+
 [lib]
 crate-type = ["cdylib", "staticlib"]
 
@@ -11,7 +15,15 @@ anyhow = "1.0"
 async-trait = "0.1"
 
 bip39 = "2.0"
-alloy = { version = "0.1", features = ["full"] }
+alloy = { version = "1", features = [
+    "signers",
+    "signer-local",
+    "consensus",
+    "eips",
+    "network",
+    "rpc-types",
+    "sol-types",
+] }
 rand = { version = "0.8", features = ["std"] }
 getrandom = { version = "0.2", features = ["js"] }
 hex = "0.4"
@@ -30,6 +42,7 @@ sha2 = "0.10"
 tiny-keccak = { version = "2.0.2", features = ["keccak"] }
 rlp = "0.6.1"
 secrecy = "0.10.3"
+rayon = { version = "1.10", optional = true }
 
 
 
