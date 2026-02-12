@@ -25,14 +25,46 @@ impl EvmAddress {
     // Đây là hàm nền tảng, tất cả hàm khác compose từ đây.
     // =========================================================================
 
-    /// Derive 20 bytes address từ private key
+    // =========================================================================
+    // PRIMARY API — Zeroizing (recommended)
+    // =========================================================================
+
+    /// Derive 20 bytes address from a **zeroizing private key**.
+    ///
+    /// This is the **recommended** API — it takes ownership of the key
+    /// material wrapped in [`Zeroizing`], guaranteeing the caller's
+    /// buffer is zeroed when this function returns.
     ///
     /// # Algorithm (chuẩn Ethereum Yellow Paper)
     /// 1. `priv_key` (32B) → secp256k1 → `pub_key` (uncompressed, 65B)
     /// 2. Bỏ prefix byte 0x04 → `pub_key_raw` (64B)
     /// 3. Keccak-256(`pub_key_raw`) → `hash` (32B)
     /// 4. `hash[12..32]` → `address` (20B)
-    pub fn derive_bytes(priv_key: &[u8]) -> WalletResult<[u8; 20]> {
+    pub fn derive_bytes(priv_key: Zeroizing<Vec<u8>>) -> WalletResult<[u8; 20]> {
+        Self::derive_bytes_from_slice(&priv_key)
+        // `priv_key` dropped & zeroed here
+    }
+
+    /// Derive EIP-55 checksummed address string from a **zeroizing private key**.
+    ///
+    /// # Returns
+    /// `"0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B"` (mixed-case checksum)
+    #[inline]
+    pub fn derive(priv_key: Zeroizing<Vec<u8>>) -> WalletResult<String> {
+        Self::derive_from_slice(&priv_key)
+        // `priv_key` dropped & zeroed here
+    }
+
+    // =========================================================================
+    // SECONDARY API — Borrowed slice (caller manages zeroing)
+    // =========================================================================
+
+    /// Derive 20 bytes address from a **borrowed byte slice**.
+    ///
+    /// # ⚠ Security Note
+    /// The caller is responsible for zeroing `priv_key` after this call.
+    /// Prefer [`derive_bytes()`](Self::derive_bytes) with `Zeroizing<Vec<u8>>`.
+    pub fn derive_bytes_from_slice(priv_key: &[u8]) -> WalletResult<[u8; 20]> {
         // Parse & validate private key
         let secret_key = SecretKey::from_slice(priv_key).map_err(|e| {
             WalletError::Crypto(CryptoError::InvalidKeyFormat(format!(
@@ -62,13 +94,14 @@ impl EvmAddress {
         Ok(address)
     }
 
-    /// Derive EIP-55 checksummed address string
+    /// Derive EIP-55 checksummed address from a **borrowed byte slice**.
     ///
-    /// # Returns
-    /// `"0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B"` (mixed-case checksum)
+    /// # ⚠ Security Note
+    /// The caller is responsible for zeroing `priv_key` after this call.
+    /// Prefer [`derive()`](Self::derive) with `Zeroizing<Vec<u8>>`.
     #[inline]
-    pub fn derive(priv_key: &[u8]) -> WalletResult<String> {
-        let bytes = Self::derive_bytes(priv_key)?;
+    pub fn derive_from_slice(priv_key: &[u8]) -> WalletResult<String> {
+        let bytes = Self::derive_bytes_from_slice(priv_key)?;
         Ok(Address::from_slice(&bytes).to_checksum(None))
     }
 
@@ -126,37 +159,60 @@ mod tests {
         "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
     const ANVIL_ADDRESS: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
 
+    // ── Primary API (Zeroizing) Tests ──────────────────────────────────
+
     #[test]
     fn test_derive() {
-        let priv_key = hex::decode(TEST_PRIVATE_KEY).unwrap();
-        let address = EvmAddress::derive(&priv_key).unwrap();
+        let priv_key = Zeroizing::new(hex::decode(TEST_PRIVATE_KEY).unwrap());
+        let address = EvmAddress::derive(priv_key).unwrap();
+        println!("Address: {}", address);
         assert_eq!(address, TEST_ADDRESS);
     }
 
     #[test]
     fn test_derive_anvil() {
-        let priv_key = hex::decode(ANVIL_PRIVATE_KEY).unwrap();
-        let address = EvmAddress::derive(&priv_key).unwrap();
+        let priv_key = Zeroizing::new(hex::decode(ANVIL_PRIVATE_KEY).unwrap());
+        let address = EvmAddress::derive(priv_key).unwrap();
+        println!("Address: {}", address);
         assert_eq!(address, ANVIL_ADDRESS);
     }
 
     #[test]
     fn test_derive_bytes() {
-        let priv_key = hex::decode(TEST_PRIVATE_KEY).unwrap();
-        let address_bytes = EvmAddress::derive_bytes(&priv_key).unwrap();
+        let priv_key = Zeroizing::new(hex::decode(TEST_PRIVATE_KEY).unwrap());
+        let address_bytes = EvmAddress::derive_bytes(priv_key).unwrap();
         let address_hex = format!("0x{}", hex::encode(address_bytes));
         assert!(EvmAddress::equals(&address_hex, TEST_ADDRESS));
     }
 
     #[test]
     fn test_derive_consistency() {
-        // derive() và derive_bytes() phải cho kết quả giống nhau
-        let priv_key = hex::decode(TEST_PRIVATE_KEY).unwrap();
-        let string_addr = EvmAddress::derive(&priv_key).unwrap();
-        let bytes_addr = EvmAddress::derive_bytes(&priv_key).unwrap();
+        // derive() và derive_from_slice() phải cho kết quả giống nhau
+        let raw = hex::decode(TEST_PRIVATE_KEY).unwrap();
+        let string_addr = EvmAddress::derive_from_slice(&raw).unwrap();
+        let bytes_addr = EvmAddress::derive_bytes_from_slice(&raw).unwrap();
         let reconstructed = Address::from_slice(&bytes_addr).to_checksum(None);
         assert_eq!(string_addr, reconstructed);
     }
+
+    // ── Secondary API (from_slice) Tests ──────────────────────────────
+
+    #[test]
+    fn test_derive_from_slice() {
+        let priv_key = hex::decode(TEST_PRIVATE_KEY).unwrap();
+        let address = EvmAddress::derive_from_slice(&priv_key).unwrap();
+        assert_eq!(address, TEST_ADDRESS);
+    }
+
+    #[test]
+    fn test_derive_bytes_from_slice() {
+        let priv_key = hex::decode(TEST_PRIVATE_KEY).unwrap();
+        let address_bytes = EvmAddress::derive_bytes_from_slice(&priv_key).unwrap();
+        let address_hex = format!("0x{}", hex::encode(address_bytes));
+        assert!(EvmAddress::equals(&address_hex, TEST_ADDRESS));
+    }
+
+    // ── Utility Tests ────────────────────────────────────────────────
 
     #[test]
     fn test_is_valid() {
@@ -188,16 +244,18 @@ mod tests {
         assert!(!EvmAddress::equals(upper, TEST_ADDRESS));
     }
 
+    // ── Error Handling Tests ─────────────────────────────────────────
+
     #[test]
     fn test_invalid_private_key() {
-        assert!(EvmAddress::derive(&[0u8; 31]).is_err()); // Wrong length
-        assert!(EvmAddress::derive(&[0u8; 33]).is_err()); // Wrong length
-        assert!(EvmAddress::derive(&[]).is_err()); // Empty
+        assert!(EvmAddress::derive(Zeroizing::new(vec![0u8; 31])).is_err());
+        assert!(EvmAddress::derive(Zeroizing::new(vec![0u8; 33])).is_err());
+        assert!(EvmAddress::derive(Zeroizing::new(vec![])).is_err());
     }
 
     #[test]
     fn test_zero_private_key_rejected() {
-        let zero_key = [0u8; 32];
-        assert!(EvmAddress::derive(&zero_key).is_err()); // 0 is not valid secp256k1 key
+        let zero_key = Zeroizing::new(vec![0u8; 32]);
+        assert!(EvmAddress::derive(zero_key).is_err());
     }
 }
