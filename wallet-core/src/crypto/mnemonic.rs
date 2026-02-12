@@ -219,7 +219,7 @@ mod tests {
 
     // Standard test mnemonic (from BIP-39 test vectors)
     const TEST_MNEMONIC_12: &str =
-        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        "glue legend climb bench since citizen ridge scheme range analyst coconut build";
     const TEST_MNEMONIC_24: &str =
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 
@@ -262,7 +262,7 @@ mod tests {
 
     #[test]
     fn test_from_phrase_invalid_word_count() {
-        let result = WalletMnemonic::from_phrase("abandon abandon abandon");
+        let result = WalletMnemonic::from_phrase("climb ridge scheme range ");
         assert!(matches!(
             result,
             Err(WalletError::Mnemonic(MnemonicError::InvalidWordCount(3)))
@@ -300,6 +300,7 @@ mod tests {
     fn test_to_seed_returns_64_bytes() {
         let mnemonic = WalletMnemonic::from_phrase(TEST_MNEMONIC_12).unwrap();
         let seed = mnemonic.to_seed(None);
+        println!("Seed: {:?}", seed);
         assert_eq!(seed.len(), 64);
     }
 

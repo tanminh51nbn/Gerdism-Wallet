@@ -84,10 +84,17 @@ impl Ed25519Deriver {
         mac.update(seed);
         let result = mac.finalize().into_bytes();
 
+        // Copy into stack buffer we fully control, then zeroize
+        let mut buf = [0u8; 64];
+        buf.copy_from_slice(&result);
+
         let mut key = [0u8; 32];
         let mut chain_code = [0u8; 32];
-        key.copy_from_slice(&result[..32]);
-        chain_code.copy_from_slice(&result[32..]);
+        key.copy_from_slice(&buf[..32]);
+        chain_code.copy_from_slice(&buf[32..]);
+
+        // Zeroize local buffer — chứa raw key material
+        buf.zeroize();
 
         Ok((key, chain_code))
     }
@@ -116,10 +123,17 @@ impl Ed25519Deriver {
 
         let result = mac.finalize().into_bytes();
 
+        // Copy into stack buffer we fully control, then zeroize
+        let mut buf = [0u8; 64];
+        buf.copy_from_slice(&result);
+
         let mut key = [0u8; 32];
         let mut chain_code = [0u8; 32];
-        key.copy_from_slice(&result[..32]);
-        chain_code.copy_from_slice(&result[32..]);
+        key.copy_from_slice(&buf[..32]);
+        chain_code.copy_from_slice(&buf[32..]);
+
+        // Zeroize local buffer — chứa raw key material
+        buf.zeroize();
 
         Ok((key, chain_code))
     }
